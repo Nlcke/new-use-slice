@@ -1,0 +1,34 @@
+{
+  "name": "new-use-slice",
+  "version": "1.0.0",
+  "description": "react state management",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nlcke/new-use-slice.git"
+  },
+  "keywords": [
+    "react",
+    "state",
+    "manager",
+    "management",
+    "store"
+  ],
+  "author": "Nikolay Yevstakhov",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Nlcke/new-use-slice/issues"
+  },
+  "homepage": "https://github.com/Nlcke/new-use-slice#readme",
+  "dependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@react-native-community/eslint-config": "^3.0.2",
+    "eslint": "^8.18.0",
+    "prettier": "^2.7.1"
+  }
+}
