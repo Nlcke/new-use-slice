@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useRef, useState, useLayoutEffect } from 'react';
 
 const { isArray } = Array;
 
@@ -54,76 +54,99 @@ const newUseSlice = (initialStore) => {
 
   /** @type {UseSlice<typeof initialStore>} */
   const useSlice = (...path) => {
-    const getSlice = useCallback(() => {
-      /** @type {any} */
-      let slice = storeRef.current;
-      for (let i = 0; i < path.length; i++) {
-        slice = slice[path[i]];
-      }
-      return slice;
-    }, path);
+    const pathRef = useRef(path);
+    pathRef.current = path;
 
-    const [slice, setState] = useState(getSlice);
-
-    const setSlice = useCallback((/** @type {any} */ sliceOrFn) => {
-      const prevSlice = getSlice();
-      let slice =
-        typeof sliceOrFn === 'function' ? sliceOrFn(prevSlice) : sliceOrFn;
-      if (sliceOrFn === getSlice) {
-        slice = initialStore;
+    /** @type {React.MutableRefObject<any>} */
+    const getSliceRef = useRef();
+    if (getSliceRef.current === undefined) {
+      getSliceRef.current = () => {
+        /** @type {any} */
+        let slice = storeRef.current;
+        const path = pathRef.current;
         for (let i = 0; i < path.length; i++) {
           slice = slice[path[i]];
         }
-      }
-      if (slice === prevSlice) {
-        return;
-      }
-      if (path.length > 0) {
-        const prevStore = storeRef.current;
-        /** @type {any} */
-        const nextStore = isArray(prevStore)
-          ? [...prevStore]
-          : { ...prevStore };
-        let store = nextStore;
-        const lastIndex = path.length - 1;
-        for (let i = 0; i < lastIndex; i++) {
-          const segment = path[i];
-          const child = store[segment];
-          store[segment] = isArray(child) ? [...child] : { ...child };
-          store = store[segment];
-        }
-        store[path[lastIndex]] = slice;
-        storeRef.current = nextStore;
-      } else {
-        storeRef.current = slice;
-      }
-      for (const listener of listeners) {
-        listener();
-      }
-    }, path);
+        return slice;
+      };
+    }
 
+    const [slice, setState] = useState(getSliceRef.current);
     const sliceRef = useRef(slice);
     sliceRef.current = slice;
 
-    const listener = useCallback(() => {
-      const slice = getSlice();
-      if (sliceRef.current != slice) {
-        setState(slice);
-      }
-    }, path);
-
-    const effect = useCallback(() => {
-      listener();
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
+    /** @type {React.MutableRefObject<any>} */
+    const setSliceRef = useRef();
+    if (setSliceRef.current === undefined) {
+      setSliceRef.current = (/** @type {any} */ sliceOrFn) => {
+        const prevSlice = getSliceRef.current();
+        const path = pathRef.current;
+        let slice =
+          typeof sliceOrFn === 'function' ? sliceOrFn(prevSlice) : sliceOrFn;
+        if (sliceOrFn === getSliceRef.current) {
+          slice = initialStore;
+          for (let i = 0; i < path.length; i++) {
+            slice = slice[path[i]];
+          }
+        }
+        if (slice === prevSlice) {
+          return;
+        }
+        if (path.length > 0) {
+          const prevStore = storeRef.current;
+          /** @type {any} */
+          const nextStore = isArray(prevStore)
+            ? [...prevStore]
+            : { ...prevStore };
+          let store = nextStore;
+          const lastIndex = path.length - 1;
+          for (let i = 0; i < lastIndex; i++) {
+            const segment = path[i];
+            const child = store[segment];
+            store[segment] = isArray(child) ? [...child] : { ...child };
+            store = store[segment];
+          }
+          store[path[lastIndex]] = slice;
+          storeRef.current = nextStore;
+        } else {
+          storeRef.current = slice;
+        }
+        for (const listener of listeners) {
+          listener();
+        }
       };
-    }, [listener]);
+    }
 
-    useEffect(effect, [effect]);
+    /** @type {React.MutableRefObject<any>} */
+    const listenerRef = useRef();
+    if (listenerRef.current === undefined) {
+      listenerRef.current = () => {
+        const nextSlice = getSliceRef.current();
+        if (sliceRef.current !== nextSlice) {
+          setState(nextSlice);
+        }
+      };
+    }
+
+    /** @type {React.MutableRefObject<any>} */
+    const effectRef = useRef();
+    if (effectRef.current === undefined) {
+      effectRef.current = () => {
+        listeners.add(listenerRef.current);
+        return () => {
+          listeners.delete(listenerRef.current);
+        };
+      };
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useLayoutEffect(effectRef.current, []);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useLayoutEffect(listenerRef.current, path);
 
     // @ts-ignore
-    return [slice, setSlice, getSlice];
+    return [slice, setSliceRef.current, getSliceRef.current];
   };
 
   return useSlice;
