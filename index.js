@@ -1,6 +1,8 @@
-import { useRef, useState, useLayoutEffect } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
 const { isArray } = Array;
+const useIsomorphicEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 /** @typedef {undefined} U */
 
@@ -139,11 +141,9 @@ const newUseSlice = (initialStore) => {
       };
     }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useLayoutEffect(effectRef.current, []);
+    useIsomorphicEffect(effectRef.current, []);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useLayoutEffect(listenerRef.current, path);
+    useIsomorphicEffect(listenerRef.current, path);
 
     // @ts-ignore
     return [slice, setSliceRef.current, getSliceRef.current];
