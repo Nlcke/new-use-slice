@@ -23,12 +23,11 @@
     "url": "https://github.com/Nlcke/new-use-slice/issues"
   },
   "homepage": "https://github.com/Nlcke/new-use-slice#readme",
-  "dependencies": {
-    "react": "^18.2.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@react-native-community/eslint-config": "^3.0.2",
     "eslint": "^8.18.0",
-    "prettier": "^2.7.1"
+    "prettier": "^2.7.1",
+    "react": "^18.2.0"
   }
 }
