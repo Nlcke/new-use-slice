@@ -1,10 +1,65 @@
 import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
 const { isArray } = Array;
+
 const useIsomorphicEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
-/** @typedef {undefined} U */
+/** @type {(store: any, path: any[]) => any} */
+const readSlice = (store, path) => {
+  const length = path.length;
+
+  switch (length) {
+    case 0:
+      return store;
+    case 1:
+      return store[path[0]];
+    case 2:
+      return store[path[0]][path[1]];
+    case 3:
+      return store[path[0]][path[1]][path[2]];
+    case 4:
+      return store[path[0]][path[1]][path[2]][path[3]];
+    case 5:
+      return store[path[0]][path[1]][path[2]][path[3]][path[4]];
+    case 6:
+      return store[path[0]][path[1]][path[2]][path[3]][path[4]][path[5]];
+    case 7:
+      return store[path[0]][path[1]][path[2]][path[3]][path[4]][path[5]][
+        path[6]
+      ];
+    case 8:
+      return store[path[0]][path[1]][path[2]][path[3]][path[4]][path[5]][
+        path[6]
+      ][path[7]];
+  }
+
+  let slice = store;
+  for (let i = 0; i < length; i++) {
+    slice = slice[path[i]];
+  }
+  return slice;
+};
+
+/** @type {<Store>(store: Store, path: any[], slice: any) => Store} */
+const getNextStore = (store, path, slice) => {
+  /** @type {any} */
+  const nextStore = isArray(store) ? [...store] : { ...store };
+  let child = nextStore;
+  const lastIndex = path.length - 1;
+  for (let i = 0; i < lastIndex; i++) {
+    const segment = path[i];
+    const subChild = child[segment];
+    child[segment] = isArray(subChild) ? [...subChild] : { ...subChild };
+    child = child[segment];
+  }
+  child[path[lastIndex]] = slice;
+  return nextStore;
+};
+
+/**
+ * @typedef {undefined} U
+ */
 
 /**
  * @template P
@@ -12,11 +67,17 @@ const useIsomorphicEffect =
  */
 
 /**
+ * @template Slice
+ * @typedef {() => void} Unlisten
+ */
+
+/**
  * @template T
  * @typedef {[
  *   slice: T,
  *   setSlice: (slice: T | ((slice: T) => T)) => void,
- *   getSlice: () => T
+ *   getSlice: (initial?: boolean) => T,
+ *   lisSlice: (listener: (slice: T) => void) => Unlisten<T>
  * ]} UseSliceResult
  */
 
@@ -46,80 +107,52 @@ const useIsomorphicEffect =
  */
 
 /**
- * @type {<Store>(initialStore: Store) => UseSlice<Store>}
+ * @type {<Store>(initialStore: Store) => UseSlice<Store> & {at: UseSlice<Store>}}
  */
 const newUseSlice = (initialStore) => {
   /** @type {Set<() => void>} */
   const listeners = new Set();
 
-  const storeRef = { current: initialStore };
+  let store = initialStore;
 
-  /** @type {UseSlice<typeof initialStore>} */
+  /** @type {UseSlice<typeof initialStore> & {at: UseSlice<typeof initialStore>}} */
+  // @ts-ignore
   const useSlice = (...path) => {
     const pathRef = useRef(path);
     pathRef.current = path;
 
-    /** @type {React.MutableRefObject<any>} */
+    /** @type {React.MutableRefObject<(initial?: boolean) => any>} */
+    // @ts-ignore
     const getSliceRef = useRef();
     if (getSliceRef.current === undefined) {
-      getSliceRef.current = () => {
-        /** @type {any} */
-        let slice = storeRef.current;
-        const path = pathRef.current;
-        for (let i = 0; i < path.length; i++) {
-          slice = slice[path[i]];
-        }
-        return slice;
-      };
+      getSliceRef.current = (initial) =>
+        readSlice(initial ? initialStore : store, pathRef.current);
     }
 
     const [slice, setState] = useState(getSliceRef.current);
     const sliceRef = useRef(slice);
     sliceRef.current = slice;
 
-    /** @type {React.MutableRefObject<any>} */
+    /** @type {React.MutableRefObject<(sliceOrFn: any) => void>} */
+    // @ts-ignore
     const setSliceRef = useRef();
     if (setSliceRef.current === undefined) {
-      setSliceRef.current = (/** @type {any} */ sliceOrFn) => {
-        const prevSlice = getSliceRef.current();
+      setSliceRef.current = (sliceOrFn) => {
         const path = pathRef.current;
-        let slice =
-          typeof sliceOrFn === 'function' ? sliceOrFn(prevSlice) : sliceOrFn;
-        if (sliceOrFn === getSliceRef.current) {
-          slice = initialStore;
-          for (let i = 0; i < path.length; i++) {
-            slice = slice[path[i]];
+        const prevSlice = readSlice(store, pathRef.current);
+        const slice =
+          typeof sliceOrFn !== 'function' ? sliceOrFn : sliceOrFn(prevSlice);
+        if (slice !== prevSlice) {
+          store = path.length > 0 ? getNextStore(store, path, slice) : slice;
+          for (const listener of listeners) {
+            listener();
           }
-        }
-        if (slice === prevSlice) {
-          return;
-        }
-        if (path.length > 0) {
-          const prevStore = storeRef.current;
-          /** @type {any} */
-          const nextStore = isArray(prevStore)
-            ? [...prevStore]
-            : { ...prevStore };
-          let store = nextStore;
-          const lastIndex = path.length - 1;
-          for (let i = 0; i < lastIndex; i++) {
-            const segment = path[i];
-            const child = store[segment];
-            store[segment] = isArray(child) ? [...child] : { ...child };
-            store = store[segment];
-          }
-          store[path[lastIndex]] = slice;
-          storeRef.current = nextStore;
-        } else {
-          storeRef.current = slice;
-        }
-        for (const listener of listeners) {
-          listener();
         }
       };
     }
 
-    /** @type {React.MutableRefObject<any>} */
+    /** @type {React.MutableRefObject<() => void>} */
+    // @ts-ignore
     const listenerRef = useRef();
     if (listenerRef.current === undefined) {
       listenerRef.current = () => {
@@ -130,7 +163,8 @@ const newUseSlice = (initialStore) => {
       };
     }
 
-    /** @type {React.MutableRefObject<any>} */
+    /** @type {React.MutableRefObject<() => () => void>} */
+    // @ts-ignore
     const effectRef = useRef();
     if (effectRef.current === undefined) {
       effectRef.current = () => {
@@ -145,8 +179,75 @@ const newUseSlice = (initialStore) => {
 
     useIsomorphicEffect(listenerRef.current, path);
 
+    /** @type {React.MutableRefObject<(listener: (slice: any) => void) => () => void>} */
     // @ts-ignore
-    return [slice, setSliceRef.current, getSliceRef.current];
+    const lisSliceRef = useRef();
+    if (lisSliceRef.current === undefined) {
+      lisSliceRef.current = (listener) => {
+        let slice = readSlice(store, pathRef.current);
+        const listenerWrapper = () => {
+          const nextSlice = readSlice(store, pathRef.current);
+          if (slice !== nextSlice) {
+            slice = nextSlice;
+            listener(nextSlice);
+          }
+        };
+        listeners.add(listenerWrapper);
+        return () => {
+          listeners.delete(listenerWrapper);
+        };
+      };
+    }
+
+    // @ts-ignore
+    return [
+      slice,
+      setSliceRef.current,
+      getSliceRef.current,
+      lisSliceRef.current,
+    ];
+  };
+
+  /** @type {UseSlice<typeof initialStore>} */
+  useSlice.at = (...path) => {
+    /** @type {(initial?: boolean) => any} */
+    const getSlice = (initial) =>
+      readSlice(initial ? initialStore : store, path);
+
+    const slice = readSlice(store, path);
+
+    /** @type {(sliceOrFn: any) => void} */
+    const setSlice = (sliceOrFn) => {
+      const prevSlice = readSlice(store, path);
+      const slice =
+        typeof sliceOrFn !== 'function' ? sliceOrFn : sliceOrFn(prevSlice);
+      if (slice !== prevSlice) {
+        store = path.length > 0 ? getNextStore(store, path, slice) : slice;
+        for (const listener of listeners) {
+          listener();
+        }
+      }
+    };
+
+    /** @type {(listener: (slice: any) => void) => () => void} */
+    const lisSlice = (listener) => {
+      let slice = readSlice(store, path);
+      const listenerWrapper = () => {
+        const nextSlice = readSlice(store, path);
+        if (slice !== nextSlice) {
+          slice = nextSlice;
+          listener(nextSlice);
+        }
+      };
+      listeners.add(listenerWrapper);
+      const unlisten = () => {
+        listeners.delete(listenerWrapper);
+      };
+      return unlisten;
+    };
+
+    // @ts-ignore
+    return [slice, setSlice, getSlice, lisSlice];
   };
 
   return useSlice;
